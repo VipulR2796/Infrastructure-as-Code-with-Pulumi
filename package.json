@@ -1,0 +1,11 @@
+{
+    "name": "iac-pulumi",
+    "main": "index.js",
+    "dependencies": {
+        "@pulumi/aws": "^5.42.0",
+        "@pulumi/awsx": "^1.0.0",
+        "@pulumi/pulumi": "^3.88.1",
+        "ip": "^1.1.8",
+        "ip-subnet-calculator": "^1.1.8"
+    }
+}
