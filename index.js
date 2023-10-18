@@ -19,6 +19,11 @@ const privateSubnetName  = config.require("privateSubnetName");
 const publicRTAName = config.require("publicRTAName");
 const privateRTAName = config.require("privateRTAName");
 
+const ipv6CIDR = config.require("ipv6CIDR");
+const portsConfig = config.get("ports");
+const stringPorts = portsConfig.split(",");
+const ports = stringPorts.map(port => parseInt(port, 10));
+
 
 // const destinationCidrBlock = config.require("destinationCidrBlock");
 
@@ -65,6 +70,9 @@ const azs = pulumi.output(aws.getAvailabilityZones({
   state: "available",
 }));
 
+// let publicSubnets = [];
+// let privateSubnets = [];
+
 // Create a private and a public subnet in each availability zone (but limit to 3)
 const subnets = azs.apply(azs => azs.names.slice(0, 3).map((name, index) => {
   // Private subnet
@@ -74,6 +82,7 @@ const subnets = azs.apply(azs => azs.names.slice(0, 3).map((name, index) => {
       availabilityZone: name,
       tags: { Name: `${privateSubnetName}-${index}` }
   });
+  // privateSubnets.push(privateSubnet);
  
   // Public subnet
   const publicSubnet = new aws.ec2.Subnet(`${publicSubnetName}-${index}`, {
@@ -82,6 +91,7 @@ const subnets = azs.apply(azs => azs.names.slice(0, 3).map((name, index) => {
       availabilityZone: name,
       tags: { Name: `${publicSubnetName}-${index}` }
   });
+  // publicSubnets.push(publicSubnet); 
  
   // Associate our route table with the public subnet
   const publicRouteTableAssociation = new aws.ec2.RouteTableAssociation(`${publicRTAName}-${index}`, {
@@ -100,6 +110,56 @@ const subnets = azs.apply(azs => azs.names.slice(0, 3).map((name, index) => {
   return { private: privateSubnet, public: publicSubnet };
 }));
 
+//creating security group
+const securityGroup = new aws.ec2.SecurityGroup("application security group", {
+  vpcId: vpc.id,
+  description: "Security group for application",
+});
+
+for (const port of ports) {
+  // Creating ingress rules
+  const ruleIngress = new aws.ec2.SecurityGroupRule(`ingress-rule-${port}`, {
+    type: "ingress",
+    fromPort: port,
+    toPort: port,
+    protocol: "tcp",
+    cidrBlocks: [destinationCidrBlock],
+    ipv6CidrBlocks: [ipv6CIDR],
+    securityGroupId: securityGroup.id,
+    description: `Allow TCP ingress on port ${port}`
+  });
+
+  // Creating egress rules
+  const ruleEgress = new aws.ec2.SecurityGroupRule(`egress-rule-${port}`, {
+    type: "egress",
+    fromPort: port,
+    toPort: port,
+    protocol: "tcp",
+    cidrBlocks: [destinationCidrBlock],
+    ipv6CidrBlocks: [ipv6CIDR],
+    securityGroupId: securityGroup.id,
+    description: `Allow TCP egress on port ${port}`
+  });
+}
+
+const keyName = config.require("key-name");
+const instanceType = config.require("instance-type");
+const amiID = config.require("ami-ID");
+const publicSubnetID = subnets.apply(subnets => subnets.map(subnet => subnet.public.id))[0];
+
+const webInstance = new aws.ec2.Instance("web", {
+  ami: amiID,
+  subnetId: publicSubnetID,
+  keyName: keyName,
+  disableApiTermination: false,
+  instanceType: instanceType,
+  vpcSecurityGroupIds: [securityGroup.id],
+  associatePublicIpAddress: true,
+  tags: {
+      Name: "Cloud-WebApp-Instance"
+  }
+});
+
 // Export the IDs of the created resources
 exports.vpcId = vpc.id;
 exports.privateSubnetIds = subnets.apply(subnets => subnets.map(subnet => subnet.private.id));
@@ -108,7 +168,7 @@ exports.publicRouteTableId = publicRouteTable.id;
 exports.privateRouteTableId = privateRouteTable.id;
 exports.internetGatewayId = ig.id;
 exports.publicRouteId = publicRoute.id;
-
+exports.instanceId = webInstance.id;
 
 
 

@@ -1,15 +1,20 @@
 config:
   aws:profile: dev
   aws:region: us-east-1
-  vpcCidrBlock: 10.0.0.0/16
-  destinationCidrBlock: 0.0.0.0/0
-  primaryVPCName: dev-vpc-1
-  primaryIGWName: dev-igw
-  primaryPbRTAName: dev-public-route-table
-  primaryPRTName: dev-private-route-table
-  primaryPublicRoute: dev-public-route
-  publicSubnetName: dev-public-subnet
-  privateSubnetName: dev-private-subnet 
-  publicRTAName: dev-public-rta
-  privateRTAName: dev-private-rta
-
+  aws:skipMetadataApiCheck: "false"
+  iac-pulumi:ami-ID: ami-062eadac5774dbe40
+  iac-pulumi:destinationCidrBlock: 0.0.0.0/0
+  iac-pulumi:instance-type: t2.micro
+  iac-pulumi:ipv6CIDR: ::/0
+  iac-pulumi:key-name: ssh-key
+  iac-pulumi:ports: "22,80,443,8080"
+  iac-pulumi:primaryIGWName: dev-igw
+  iac-pulumi:primaryPRTName: dev-private-route-table
+  iac-pulumi:primaryPbRTAName: dev-public-route-table
+  iac-pulumi:primaryPublicRoute: dev-public-route
+  iac-pulumi:primaryVPCName: dev-vpc-1
+  iac-pulumi:privateRTAName: dev-private-rta
+  iac-pulumi:privateSubnetName: dev-private-subnet
+  iac-pulumi:publicRTAName: dev-public-rta
+  iac-pulumi:publicSubnetName: dev-public-subnet
+  iac-pulumi:vpcCidrBlock: 10.0.0.0/16
