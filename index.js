@@ -23,7 +23,12 @@ const ipv6CIDR = config.require("ipv6CIDR");
 const portsConfig = config.get("ports");
 const stringPorts = portsConfig.split(",");
 const ports = stringPorts.map(port => parseInt(port, 10));
-
+const dbPort = config.require("dbPort");
+const dbFamily = config.require("dbFamily");
+const dbEngine = config.require("dbEngine");
+const rdsUsername = config.require("rdsUsername");
+const rdsPassword = config.require("rdsPassword");
+const rdsName = config.require("rdsName");
 
 // const destinationCidrBlock = config.require("destinationCidrBlock");
 
@@ -111,7 +116,7 @@ const subnets = azs.apply(azs => azs.names.slice(0, 3).map((name, index) => {
 }));
 
 //creating security group
-const securityGroup = new aws.ec2.SecurityGroup("application security group", {
+const appSecurityGroup = new aws.ec2.SecurityGroup("application security group", {
   vpcId: vpc.id,
   description: "Security group for application",
 });
@@ -125,7 +130,7 @@ for (const port of ports) {
     protocol: "tcp",
     cidrBlocks: [destinationCidrBlock],
     ipv6CidrBlocks: [ipv6CIDR],
-    securityGroupId: securityGroup.id,
+    securityGroupId: appSecurityGroup.id,
     description: `Allow TCP ingress on port ${port}`
   });
 
@@ -137,24 +142,169 @@ for (const port of ports) {
     protocol: "tcp",
     cidrBlocks: [destinationCidrBlock],
     ipv6CidrBlocks: [ipv6CIDR],
-    securityGroupId: securityGroup.id,
+    securityGroupId: appSecurityGroup.id,
     description: `Allow TCP egress on port ${port}`
   });
 }
 
+// Creating DB security group
+const dbSecurityGroup = new aws.ec2.SecurityGroup("dbSecurityGroup", {
+  vpcId: vpc.id,
+  
+  description: "Security group for RDS instances",
+});
+
+const ruleIngressDb = new aws.ec2.SecurityGroupRule("ingress-rule-db", {
+  type: "ingress",
+  fromPort: dbPort, // MySQL port
+  toPort: dbPort,
+  protocol: "tcp",
+  securityGroupId: dbSecurityGroup.id,
+  sourceSecurityGroupId: appSecurityGroup.id, // Allow connection from application security group
+  description: "Allow TCP ingress on port 3306 from application security group"
+});
+
+// Creating egress rules
+const ruleEgress = new aws.ec2.SecurityGroupRule(`egress-rule-${3306}`, {
+  type: "egress",
+  fromPort: dbPort,
+  toPort: dbPort,
+  protocol: "tcp",
+  cidrBlocks: [destinationCidrBlock],
+  ipv6CidrBlocks: [ipv6CIDR],
+  securityGroupId: appSecurityGroup.id,
+  description: `Allow TCP egress on port ${dbPort}`
+});
+
+// let dbSecurityGroup = new aws.ec2.SecurityGroup("db-security-group", {
+//   vpcId: vpc.id,
+//   description: "Database security group",
+//   ingress: [
+//     {
+//       protocol: "tcp",
+//       fromPort: 3306, // Change port depending on the RDBMS you're using (5432 for PostgreSQL)
+//       toPort: 3306,
+//       securityGroups: [securityGroup.id], // Traffic source is the app security group
+//     },
+//   ],
+//   egress: [
+//     {
+//       // Restricting access to internet
+//       protocol: "-1",
+//       fromPort: 0,
+//       toPort: 0,
+//       cidrBlocks: vpcCidrBlock,
+//     },
+//   ],
+// });
+
+const publicSubnetIDs = subnets.apply(subnets => subnets.map(subnet => subnet.public.id));
+// A database subnet group
+var dbSubnetGroup = new aws.rds.SubnetGroup("db-subnet-group", {
+  subnetIds: publicSubnetIDs,
+  tags: {
+    Name: "db-subnet-group",
+  },
+});
+
+// A database parameter group for MariaDB 10.6
+var dbParameterGroup = new aws.rds.ParameterGroup("mariadb-parameter-group", {
+  family: dbFamily, 
+  vpcId: vpc.id,
+  description: "Database parameter group for MariaDB 10.6",
+  parameters: [
+    {
+      name: "character_set_server",
+      value: "utf8",
+    },
+  ],
+});
+
+// Launch a MariaDB instance
+var dbInstance = new aws.rds.Instance("csye6225", {
+  vpcId: vpc.id,
+  engine: dbEngine,
+  instanceClass: "db.t3.micro",
+  allocatedStorage: 20,
+  storageType: "gp2",
+  name: rdsName,
+  username: rdsUsername,
+  password: rdsPassword,
+  vpcSecurityGroupIds: [ dbSecurityGroup.id ], // Referencing the security group
+  dbSubnetGroupName: dbSubnetGroup.name, // Associating DB instance with DB subnet group
+  parameterGroupName: dbParameterGroup.name, // Associating DB instance with DB parameter group
+  skipFinalSnapshot: true,
+  publiclyAccessible: true,
+  multiAz: false,
+});
+
+// Creating EC2 instance
 const keyName = config.require("key-name");
 const instanceType = config.require("instance-type");
 const amiID = config.require("ami-ID");
 const publicSubnetID = subnets.apply(subnets => subnets.map(subnet => subnet.public.id))[0];
 
+// User data script
+// let userData = `#!/bin/bash
+// echo "Setting up environment variables..."
+// echo 'export DB_USER=${dbConfig.username}' >> /etc/profile
+// echo 'export DB_PASSWORD=${dbConfig.password}' >> /etc/profile
+// echo 'export DB_HOST=${dbConfig.host}' >> /etc/profile
+// `;
+
+// let userData = `#!/bin/bash
+// echo ' export DB_PORT=3306' >> /home/admin/webapp/.env
+// echo 'export DB_HOST=${rdsEndpoint}' >> /home/admin/webapp/.env
+// echo 'export DB_DIALECT=mysql' >> /home/admin/webapp/.env
+// echo 'export DB_USER=root' >> /home/admin/webapp/.env
+// echo 'export DB_PASSWORD=password' >> /home/admin/webapp/.env
+// echo 'export DB_NAME=Demo' >> /home/admin/webapp/.env
+// `;
+// const rdsEndpoint = dbInstance.endpoint.apply(endpoint => endpoint.toString()); 
+const rdsEndpoint = dbInstance.address;
+const userData = pulumi.interpolate`#!/bin/bash
+{
+  echo 'DB_HOST:"${rdsEndpoint}"'
+  echo 'DB_PORT:3306'
+  echo 'DB_USER:csye6225'
+  echo 'DB_PASSWORD:password'
+  echo 'DB_NAME:Demo'
+} >> /opt/csye6225/.env
+sudo chown csye6225:csye6225 /opt/csye6225/*
+sudo chown csye6225:csye6225 /opt/users.csv
+sudo chmod 660 /opt/csye6225/.env
+`;
+
+let dbConfig = pulumi
+  .all({
+    username: rdsUsername,
+    password: rdsPassword,
+    address: rdsEndpoint, // You might need to adjust depending upon object structure
+    dialect: "mysql",
+    name: rdsName,
+  })
+  .apply((db) =>
+    [
+      "#!/bin/bash",
+      "cd /opt/csye6225",
+      "sudo touch .env",
+      'echo "Setting up environment variables..."',
+      `echo 'DB_USER=${db.username}' >> .env`,
+      `echo 'DB_PASSWORD=${db.password}' >> .env`,
+      `echo 'DB_HOST=${db.address}' >> .env`,
+      `echo 'DB_DIALECT=${db.dialect}' >> .env`,
+      `echo 'DB_NAME=${db.name}' >> .env`,
+    ].join("\n")
+  );
 const webInstance = new aws.ec2.Instance("web", {
   ami: amiID,
   subnetId: publicSubnetID,
   keyName: keyName,
   disableApiTermination: false,
   instanceType: instanceType,
-  vpcSecurityGroupIds: [securityGroup.id],
+  vpcSecurityGroupIds: [appSecurityGroup.id],
   associatePublicIpAddress: true,
+  userData: dbConfig,
   tags: {
       Name: "Cloud-WebApp-Instance"
   }
@@ -169,6 +319,8 @@ exports.privateRouteTableId = privateRouteTable.id;
 exports.internetGatewayId = ig.id;
 exports.publicRouteId = publicRoute.id;
 exports.instanceId = webInstance.id;
+// Export the hostname of the RDS instance
+exports.dbHostname = dbInstance.endpoint;
 
 
 
