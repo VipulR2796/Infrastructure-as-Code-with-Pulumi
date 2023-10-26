@@ -28,7 +28,7 @@ const dbFamily = config.require("dbFamily");
 const dbEngine = config.require("dbEngine");
 const rdsUsername = config.require("rdsUsername");
 const rdsPassword = config.require("rdsPassword");
-const rdsName = config.require("rdsName");
+const rdsName = config.require("rdsDbName");
 
 // const destinationCidrBlock = config.require("destinationCidrBlock");
 
