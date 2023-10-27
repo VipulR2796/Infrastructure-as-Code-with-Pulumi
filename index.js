@@ -167,41 +167,26 @@ const ruleIngressDb = new aws.ec2.SecurityGroupRule("ingress-rule-db", {
 // Creating egress rules
 const ruleEgress = new aws.ec2.SecurityGroupRule(`egress-rule-${3306}`, {
   type: "egress",
-  fromPort: dbPort,
-  toPort: dbPort,
-  protocol: "tcp",
+  // fromPort: dbPort,
+  // toPort: dbPort,
+  // protocol: "tcp",
   cidrBlocks: [destinationCidrBlock],
-  ipv6CidrBlocks: [ipv6CIDR],
+  // ipv6CidrBlocks: [ipv6CIDR],
   securityGroupId: appSecurityGroup.id,
+
+  // Restricting access to internet
+  protocol: "-1",
+  fromPort: 0,
+  toPort: 0,
   description: `Allow TCP egress on port ${dbPort}`
 });
 
-// let dbSecurityGroup = new aws.ec2.SecurityGroup("db-security-group", {
-//   vpcId: vpc.id,
-//   description: "Database security group",
-//   ingress: [
-//     {
-//       protocol: "tcp",
-//       fromPort: 3306, // Change port depending on the RDBMS you're using (5432 for PostgreSQL)
-//       toPort: 3306,
-//       securityGroups: [securityGroup.id], // Traffic source is the app security group
-//     },
-//   ],
-//   egress: [
-//     {
-//       // Restricting access to internet
-//       protocol: "-1",
-//       fromPort: 0,
-//       toPort: 0,
-//       cidrBlocks: vpcCidrBlock,
-//     },
-//   ],
-// });
 
 const publicSubnetIDs = subnets.apply(subnets => subnets.map(subnet => subnet.public.id));
+const privateSubnetIDs = subnets.apply(subnets => subnets.map(subnet => subnet.private.id));
 // A database subnet group
 var dbSubnetGroup = new aws.rds.SubnetGroup("db-subnet-group", {
-  subnetIds: publicSubnetIDs,
+  subnetIds: privateSubnetIDs,
   tags: {
     Name: "db-subnet-group",
   },
@@ -234,7 +219,7 @@ var dbInstance = new aws.rds.Instance("csye6225", {
   dbSubnetGroupName: dbSubnetGroup.name, // Associating DB instance with DB subnet group
   parameterGroupName: dbParameterGroup.name, // Associating DB instance with DB parameter group
   skipFinalSnapshot: true,
-  publiclyAccessible: true,
+  publiclyAccessible: false,
   multiAz: false,
 });
 
@@ -244,36 +229,8 @@ const instanceType = config.require("instance-type");
 const amiID = config.require("ami-ID");
 const publicSubnetID = subnets.apply(subnets => subnets.map(subnet => subnet.public.id))[0];
 
-// User data script
-// let userData = `#!/bin/bash
-// echo "Setting up environment variables..."
-// echo 'export DB_USER=${dbConfig.username}' >> /etc/profile
-// echo 'export DB_PASSWORD=${dbConfig.password}' >> /etc/profile
-// echo 'export DB_HOST=${dbConfig.host}' >> /etc/profile
-// `;
-
-// let userData = `#!/bin/bash
-// echo ' export DB_PORT=3306' >> /home/admin/webapp/.env
-// echo 'export DB_HOST=${rdsEndpoint}' >> /home/admin/webapp/.env
-// echo 'export DB_DIALECT=mysql' >> /home/admin/webapp/.env
-// echo 'export DB_USER=root' >> /home/admin/webapp/.env
-// echo 'export DB_PASSWORD=password' >> /home/admin/webapp/.env
-// echo 'export DB_NAME=Demo' >> /home/admin/webapp/.env
-// `;
-// const rdsEndpoint = dbInstance.endpoint.apply(endpoint => endpoint.toString()); 
 const rdsEndpoint = dbInstance.address;
-const userData = pulumi.interpolate`#!/bin/bash
-{
-  echo 'DB_HOST:"${rdsEndpoint}"'
-  echo 'DB_PORT:3306'
-  echo 'DB_USER:csye6225'
-  echo 'DB_PASSWORD:password'
-  echo 'DB_NAME:Demo'
-} >> /opt/csye6225/.env
-sudo chown csye6225:csye6225 /opt/csye6225/*
-sudo chown csye6225:csye6225 /opt/users.csv
-sudo chmod 660 /opt/csye6225/.env
-`;
+
 
 let dbConfig = pulumi
   .all({
