@@ -1,6 +1,9 @@
 const pulumi = require("@pulumi/pulumi");
 const aws = require("@pulumi/aws");
 const ip = require("ip");
+const rds = require("@pulumi/aws/rds");
+const route53 = require("@pulumi/aws/route53");
+const iam = require("@pulumi/aws/iam");
 
 
 const config = new pulumi.Config();
@@ -30,6 +33,8 @@ const rdsUsername = config.require("rdsUsername");
 const rdsPassword = config.require("rdsPassword");
 const rdsName = config.require("rdsDbName");
 
+const cloudwatch_config = config.require("cloudwatch_config");
+const domain_name = config.require("domain_name");
 // const destinationCidrBlock = config.require("destinationCidrBlock");
 
 const subnetCalculator = require('ip-subnet-calculator');
@@ -135,16 +140,16 @@ for (const port of ports) {
   });
 
   // Creating egress rules
-  const ruleEgress = new aws.ec2.SecurityGroupRule(`egress-rule-${port}`, {
-    type: "egress",
-    fromPort: port,
-    toPort: port,
-    protocol: "tcp",
-    cidrBlocks: [destinationCidrBlock],
-    ipv6CidrBlocks: [ipv6CIDR],
-    securityGroupId: appSecurityGroup.id,
-    description: `Allow TCP egress on port ${port}`
-  });
+  // const ruleEgress = new aws.ec2.SecurityGroupRule(`egress-rule-${port}`, {
+  //   type: "egress",
+  //   fromPort: port,
+  //   toPort: port,
+  //   protocol: "tcp",
+  //   cidrBlocks: [destinationCidrBlock],
+  //   ipv6CidrBlocks: [ipv6CIDR],
+  //   securityGroupId: appSecurityGroup.id,
+  //   description: `Allow TCP egress on port ${port}`
+  // });
 }
 
 // Creating DB security group
@@ -205,6 +210,60 @@ var dbParameterGroup = new aws.rds.ParameterGroup("mariadb-parameter-group", {
   ],
 });
 
+//-----------------
+new aws.ec2.SecurityGroupRule("application-security-group-egress-rule", {
+  type: "egress",
+  protocol: "tcp",
+  fromPort: 5432,
+  toPort: 5432,
+  sourceSecurityGroupId: dbSecurityGroup.id,
+  securityGroupId: appSecurityGroup.id,
+  description: "Allow outbound TCP traffic on port 5432 from the application to the database instance",
+});
+
+new aws.ec2.SecurityGroupRule("application-security-group-port-egress-rule", {
+  type: "egress",
+  fromPort: 443,
+  toPort: 443,
+  protocol: "tcp",
+  cidrBlocks: [destinationCidrBlock],
+  ipv6CidrBlocks: [ipv6CIDR],
+  securityGroupId: appSecurityGroup.id,
+});
+
+const policyDocument = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [
+      {
+          Action: "sts:AssumeRole",
+          Effect: "Allow",
+          Principal: {
+              Service: "ec2.amazonaws.com",
+          },
+      },
+  ],
+});
+
+const role = new iam.Role("cloudwatch-agent-role", {
+  assumeRolePolicy: policyDocument,
+  tags: {
+      Name: "cloudwatch-agent-role",
+  },
+});
+
+const instanceProfile = new iam.InstanceProfile("cloudwatch-instance-profile", {
+  role: role.name,
+  tags: {
+      Name: "cloudwatch-instance-profile",
+  },
+});
+
+new iam.RolePolicyAttachment("cloudwatch-agent-policy", {
+  policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+  role: role.name,
+});
+
+
 // Launch a MariaDB instance
 var dbInstance = new aws.rds.Instance("csye6225", {
   vpcId: vpc.id,
@@ -239,6 +298,10 @@ let dbConfig = pulumi
     address: rdsEndpoint, // You might need to adjust depending upon object structure
     dialect: "mysql",
     name: rdsName,
+    users_csv_path: "/opt/csye6225/users.csv",
+    statsd_host: "localhost",
+    statsd_port: "8125",
+    cloudwatch_config: cloudwatch_config,
   })
   .apply((db) =>
     [
@@ -251,8 +314,55 @@ let dbConfig = pulumi
       `echo 'DB_HOST=${db.address}' >> .env`,
       `echo 'DB_DIALECT=${db.dialect}' >> .env`,
       `echo 'DB_NAME=${db.name}' >> .env`,
+      `echo 'USERS_CSV_PATH=${db.users_csv_path}' >> .env`,
+      `echo 'STATSD_HOST=${db.statsd_host}' >> .env`,
+      `echo 'STATSD_PORT=${db.statsd_port}' >> .env`,
+      ``,
+      "sudo chown csye6225:csye6225 /opt/csye6225/*",
+      "sudo chown csye6225:csye6225 /opt/users.csv",
+      "sudo chmod 660 /opt/csye6225/.env",
+      "sudo touch /var/log/webapp.log",
+      "sudo chown csye6225:csye6225 /var/log/webapp.log",
+      `sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+        -a fetch-config \
+        -m ec2 \
+        -c file:${cloudwatch_config} \
+        -s\
+        `,
+      "sudo systemctl enable amazon-cloudwatch-agent",
+      "sudo systemctl start amazon-cloudwatch-agent"
     ].join("\n")
   );
+
+
+
+//-----------------
+// const dbConfig = pulumi.interpolate`#!/bin/bash
+//   username=${db_username};
+//   password=${db_pass};
+//   address=${rds_instance.address};
+//   dialect=${db_engine};
+//   name=${db_name};
+//   cd /opt/csye6225
+//   sudo touch .env
+//   echo "DB_USER=\${username}" >> .env
+//   echo "DB_PASSWORD=\${password}" >> .env
+//   echo "DB_HOST=\${address}" >> .env
+//   echo "DB_DIALECT=\${dialect}" >> .env
+//   echo "DB_NAME=\${name}" >> .env
+
+//   sudo chown -R csye6225:csye6225 /opt/csye6225
+  
+//   sudo touch /var/log/csye6225.log
+//   sudo touch /var/log/csye6225err.log
+//   sudo chown csye6225:csye6225 /var/log/csye6225.log
+//   sudo chown csye6225:csye6225 /var/log/csye6225err.log
+
+//   sudo amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent.json
+
+//   sudo systemctl enable amazon-cloudwatch-agent
+//   sudo systemctl start amazon-cloudwatch-agent`;
+
 const webInstance = new aws.ec2.Instance("web", {
   ami: amiID,
   subnetId: publicSubnetID,
@@ -262,10 +372,39 @@ const webInstance = new aws.ec2.Instance("web", {
   vpcSecurityGroupIds: [appSecurityGroup.id],
   associatePublicIpAddress: true,
   userData: dbConfig,
+  iamInstanceProfile: instanceProfile.name,
   tags: {
-      Name: "Cloud-WebApp-Instance"
-  }
+      Name: "Cloud-WebApp-Instance",
+  },
+  dependsOn: [dbInstance],
 });
+
+
+const zone = aws.route53.getZone({ name: domain_name }, { async: true });
+
+// Get the hosted zone by ID.
+const zoneID = aws.route53
+  .getZone({ name: domain_name })
+  .then((zone) => zone.zoneId);
+
+// const zoneID = new route53.getZone({
+//   name: domain_name,
+// });
+const record = new aws.route53.Record(`A-record-domain`, {
+  name: domain_name,
+  type: "A",
+  ttl: 60,
+  records: [webInstance.publicIp],
+  zoneId: zoneID,
+});
+// new route53.Record("New-A-record", {
+//   name: domain_name,
+//   type: "A",
+//   ttl: 60,
+//   zoneId: zoneID.id,
+//   records: [webInstance.publicIp],
+//   allowOverwrite: true,
+// });
 
 // Export the IDs of the created resources
 exports.vpcId = vpc.id;

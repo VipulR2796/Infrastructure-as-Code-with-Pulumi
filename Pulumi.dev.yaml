@@ -2,7 +2,7 @@ config:
   aws:profile: dev
   aws:region: us-east-1
   aws:skipMetadataApiCheck: "false"
-  iac-pulumi:ami-ID: ami-05551a9a1579e4c36 #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
+  iac-pulumi:ami-ID: ami-052ee1477c9c717e9 #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
   iac-pulumi:destinationCidrBlock: 0.0.0.0/0
   iac-pulumi:instance-type: t2.micro
   iac-pulumi:ipv6CIDR: ::/0
@@ -24,5 +24,7 @@ config:
   iac-pulumi:rdsUsername: "csye6225"
   iac-pulumi:rdsPassword: "csye6225"
   iac-pulumi:rdsDbName: "csye6225"
+  iac-pulumi:cloudwatch_config: /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
+  iac-pulumi:domain_name: dev.cloudneu.me
 
 
