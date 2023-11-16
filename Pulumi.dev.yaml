@@ -3,11 +3,18 @@ config:
   aws:region: us-east-1
   aws:skipMetadataApiCheck: "false"
   iac-pulumi:ami-ID: ami-052ee1477c9c717e9 #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
+  iac-pulumi:appPort: "8080"
+  iac-pulumi:cloudwatch_config: /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
+  iac-pulumi:dbEngine: "mariadb"
+  iac-pulumi:dbFamily: "mariadb10.6"
+  iac-pulumi:dbPort: "3306"
+  iac-pulumi:loadBalancerConfig: "80,443"
   iac-pulumi:destinationCidrBlock: 0.0.0.0/0
+  iac-pulumi:domain_name: dev.cloudneu.me
   iac-pulumi:instance-type: t2.micro
   iac-pulumi:ipv6CIDR: ::/0
   iac-pulumi:key-name: ssh-key-dev
-  iac-pulumi:ports: "22,80,443,8080"
+  iac-pulumi:ports: "22,8080"
   iac-pulumi:primaryIGWName: dev-igw
   iac-pulumi:primaryPRTName: dev-private-route-table
   iac-pulumi:primaryPbRTAName: dev-public-route-table
@@ -17,14 +24,7 @@ config:
   iac-pulumi:privateSubnetName: dev-private-subnet
   iac-pulumi:publicRTAName: dev-public-rta
   iac-pulumi:publicSubnetName: dev-public-subnet
-  iac-pulumi:vpcCidrBlock: 10.0.0.0/16
-  iac-pulumi:dbPort: 3306
-  iac-pulumi:dbFamily: "mariadb10.6"
-  iac-pulumi:dbEngine: "mariadb"
-  iac-pulumi:rdsUsername: "csye6225"
-  iac-pulumi:rdsPassword: "csye6225"
   iac-pulumi:rdsDbName: "csye6225"
-  iac-pulumi:cloudwatch_config: /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
-  iac-pulumi:domain_name: dev.cloudneu.me
-
-
+  iac-pulumi:rdsPassword: "csye6225"
+  iac-pulumi:rdsUsername: "csye6225"
+  iac-pulumi:vpcCidrBlock: 10.0.0.0/16
