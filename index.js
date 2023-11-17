@@ -345,11 +345,11 @@ const targetGroup = new aws.lb.TargetGroup("web-app-target-group", {
   vpcId: vpc.id,
   healthCheck: {
     enabled: true,
-    interval: 60,
+    interval: 30,
     path: "/healthz",
     port: appPort.toString(),
     protocol: "HTTP",
-    timeout: 5,
+    timeout: 10,
 },
 });
 
@@ -359,29 +359,26 @@ const listener = new aws.lb.Listener("web-app-listener", {
   protocol: "HTTP",
   defaultActions: [
     {
-      type: "fixed-response",
-      fixedResponse: {
-        contentType: "text/plain",
-        statusCode: "200",
+      type: "forward",
+      targetGroupArn: targetGroup.arn
         
-      },
     },
   ],
 });
 
 // Attach the target group to the listener
-const targetGroupAttachment = new aws.lb.ListenerRule("web-app-listener-rule", {
-  listenerArn: listener.arn,
-  actions: [{
-    type: "forward",
-    targetGroupArn: targetGroup.arn,
-  }],
-  conditions: [{
-    pathPattern: {
-      values: ["/"], // Route traffic to the root context
-    },
-  }],
-});
+// const targetGroupAttachment = new aws.lb.ListenerRule("web-app-listener-rule", {
+//   listenerArn: listener.arn,
+//   actions: [{
+//     type: "forward",
+//     targetGroupArn: targetGroup.arn,
+//   }],
+//   conditions: [{
+//     pathPattern: {
+//       values: ["/"], // Route traffic to the root context
+//     },
+//   }],
+// });
 
 // Creating EC2 instance
 const keyName = config.require("key-name");
@@ -467,10 +464,22 @@ const ec2LaunchTemplate = new aws.ec2.LaunchTemplate("ec2LaunchTemplate", {
   // ],
   disableApiTermination: false,
   instanceType: instanceType,
-  vpcSecurityGroupIds: [appSecurityGroup.id],
-  associatePublicIpAddress: true,
+  networkInterfaces: [
+    {
+      associatePublicIpAddress: true,
+      securityGroups: [appSecurityGroup.id],
+    },
+  ],
   userData: dbConfig.apply(data => Buffer.from(data).toString('base64')), 
   iamInstanceProfile: {name: instanceProfile.name},
+  ebsBlockDevices: [
+    {
+      deviceName: "/dev/xvda",
+      volumeSize: 25,
+      volumeType: "gp2",
+      deleteOnTermination: true,
+    },
+  ],
   dependsOn: [dbInstance],
   tags: {
       Name: "Cloud-WebApp-Instance",
@@ -572,7 +581,7 @@ const autoScalingGroup = new aws.autoscaling.Group("AutoScalerGroup", {
 const scaleUpPolicy = new aws.autoscaling.Policy("scaleUp", {
   scalingAdjustment: 1,
   adjustmentType: "ChangeInCapacity",
-  cooldown: 300,
+  cooldown: 60,
   autoscalingGroupName: autoScalingGroup.name,
   policyType: "SimpleScaling",
 });
@@ -599,7 +608,7 @@ const scaleUpCpuAlarm = new aws.cloudwatch.MetricAlarm("scaleUpCpuAlarm", {
 const scaleDownPolicy = new aws.autoscaling.Policy("scaleDown", {
   scalingAdjustment: -1,
   adjustmentType: "ChangeInCapacity",
-  cooldown: 300,
+  cooldown: 60,
   autoscalingGroupName: autoScalingGroup.name,
   policyType: "SimpleScaling",
 });
@@ -619,13 +628,25 @@ const scaleDownCpuAlarm = new aws.cloudwatch.MetricAlarm("scaleDownCpuAlarm", {
   },
 });
 
-// const zone = aws.route53.getZone({ name: domain_name }, { async: true });
+const zone = aws.route53.getZone({ name: domain_name }, { async: true });
 
 // // Get the hosted zone by ID.
-// const zoneID = aws.route53
-//   .getZone({ name: domain_name })
-//   .then((zone) => zone.zoneId);
+const zoneID = aws.route53
+  .getZone({ name: domain_name })
+  .then((zone) => zone.zoneId);
 
+  const record = new aws.route53.Record("A-record-domain", {
+    name: domain_name,
+    type: "A",
+    zoneId: zoneID,
+    aliases: [
+      {
+        name: loadBalancer.dnsName,
+        zoneId: loadBalancer.zoneId,
+        evaluateTargetHealth: true,
+      },
+    ],
+  });
 // const zoneID = new route53.getZone({
 //   name: domain_name,
 // });
@@ -654,21 +675,21 @@ const scaleDownCpuAlarm = new aws.cloudwatch.MetricAlarm("scaleDownCpuAlarm", {
 // });
 
 // Fetch the hosted Zone using the domain name
-const hostedZoneId = aws.route53.getZone({ name: domain_name}, { async: true });
+// const hostedZoneId = aws.route53.getZone({ name: domain_name}, { async: true });
 
-// Create A Record which points to the Load Balancer
-const aRecord = new aws.route53.Record("aRecord", {
-    name: domain_name,  // Replace with your subdomain name
-    type: "A",
-    zoneId: hostedZoneId.then(hostedZoneId => hostedZoneId.zoneId),
-    aliases: [
-        {
-            name: loadBalancer.dnsName,
-            zoneId: loadBalancer.zoneId,
-            evaluateTargetHealth: true,
-        },
-    ],
-});
+// // Create A Record which points to the Load Balancer
+// const aRecord = new aws.route53.Record("aRecord", {
+//     name: domain_name,  // Replace with your subdomain name
+//     type: "A",
+//     zoneId: hostedZoneId.then(hostedZoneId => hostedZoneId.zoneId),
+//     aliases: [
+//         {
+//             name: loadBalancer.dnsName,
+//             zoneId: loadBalancer.zoneId,
+//             evaluateTargetHealth: true,
+//         },
+//     ],
+// });
 
 
 // Export the IDs of the created resources
@@ -684,4 +705,7 @@ exports.publicRouteId = publicRoute.id;
 exports.dbHostname = dbInstance.endpoint;
 
 
-
+// exports.launchTemplateName = this.launchTemplate.name;
+// exports.autoScalingGroupName = autoScalingGroup.name;
+// exports.zoneID = zone.then((z) => z.zoneId);
+// exports.domain_name = record.name;
