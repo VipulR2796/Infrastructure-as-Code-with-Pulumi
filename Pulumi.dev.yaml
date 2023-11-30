@@ -2,18 +2,21 @@ config:
   aws:profile: dev
   aws:region: us-east-1
   aws:skipMetadataApiCheck: "false"
-  iac-pulumi:ami-ID: ami-052ee1477c9c717e9 #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
+  gcp:project: webapp-dev-406301
+  iac-pulumi:ami-ID: ami-0937f9c4c2cf75509 #ami-080f504f9d068c80e #ami-0510d5c38a797263e #ami-0510d5c38a797263e #ami-0c0ca11b7c118913b #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
   iac-pulumi:appPort: "8080"
   iac-pulumi:cloudwatch_config: /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
   iac-pulumi:dbEngine: "mariadb"
   iac-pulumi:dbFamily: "mariadb10.6"
   iac-pulumi:dbPort: "3306"
-  iac-pulumi:loadBalancerConfig: "80,443"
   iac-pulumi:destinationCidrBlock: 0.0.0.0/0
   iac-pulumi:domain_name: dev.cloudneu.me
+  iac-pulumi:gcpBucketName: "webapp_submissions"
   iac-pulumi:instance-type: t2.micro
   iac-pulumi:ipv6CIDR: ::/0
   iac-pulumi:key-name: ssh-key-dev
+  iac-pulumi:lambdaCodeArchivePath: "/Users/vipulrajderkar/Cloud/Git/Vipul_Rajderkar_002700991_09/serverless.zip"
+  iac-pulumi:loadBalancerConfig: "80,443"
   iac-pulumi:ports: "22,8080"
   iac-pulumi:primaryIGWName: dev-igw
   iac-pulumi:primaryPRTName: dev-private-route-table
@@ -28,3 +31,4 @@ config:
   iac-pulumi:rdsPassword: "csye6225"
   iac-pulumi:rdsUsername: "csye6225"
   iac-pulumi:vpcCidrBlock: 10.0.0.0/16
+  iac-pulumi:logFilePath: /var/log/webapp.log

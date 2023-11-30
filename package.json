@@ -4,6 +4,7 @@
     "dependencies": {
         "@pulumi/aws": "^5.42.0",
         "@pulumi/awsx": "^1.0.0",
+        "@pulumi/gcp": "^7.2.1",
         "@pulumi/pulumi": "^3.88.1",
         "ip": "^1.1.8",
         "ip-subnet-calculator": "^1.1.8",
