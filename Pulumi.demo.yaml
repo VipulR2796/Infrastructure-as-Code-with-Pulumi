@@ -1,8 +1,8 @@
 config:
-  aws:profile: dev
+  aws:profile: demo
   aws:region: us-east-1
   aws:skipMetadataApiCheck: "false"
-  gcp:project: webapp-dev-406301
+  gcp:project: webapp-demo-406301
   iac-pulumi:ami-ID: ami-0075c37d7afc02401 #ami-0937f9c4c2cf75509 #ami-080f504f9d068c80e #ami-0510d5c38a797263e #ami-0510d5c38a797263e #ami-0c0ca11b7c118913b #ami-0db944777304be7a1 #ami-0efdcfc9efbe4a068 #ami-039ba05b68701fbab #
   iac-pulumi:appPort: "8080"
   iac-pulumi:cloudwatch_config: /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json
@@ -10,14 +10,14 @@ config:
   iac-pulumi:dbFamily: "mariadb10.6"
   iac-pulumi:dbPort: "3306"
   iac-pulumi:destinationCidrBlock: 0.0.0.0/0
-  iac-pulumi:domain_name: dev.cloudneu.me
-  iac-pulumi:certificate_arn: arn:aws:acm:us-east-1:624197887744:certificate/9da2d996-d870-42c5-b928-e83b9b51b658
+  iac-pulumi:domain_name: demo.cloudneu.me
+  iac-pulumi:certificate_arn: arn:aws:acm:us-east-1:405204851463:certificate/84b9219d-f822-401b-a48a-ea12ceedfb39
   iac-pulumi:dev_certificate_arn: arn:aws:acm:us-east-1:624197887744:certificate/9da2d996-d870-42c5-b928-e83b9b51b658
   iac-pulumi:demo_certificate_arn: arn:aws:acm:us-east-1:405204851463:certificate/84b9219d-f822-401b-a48a-ea12ceedfb39
-  iac-pulumi:gcpBucketName: "webapp_submissions"
+  iac-pulumi:gcpBucketName: "webapp_submissions_demo"
   iac-pulumi:instance-type: t2.micro
   iac-pulumi:ipv6CIDR: ::/0
-  iac-pulumi:key-name: ssh-key-dev
+  iac-pulumi:key-name: ssh-key-demo
   iac-pulumi:lambdaCodeArchivePath: "/Users/vipulrajderkar/Cloud/Git/Vipul_Rajderkar_002700991_09/serverless.zip"
   iac-pulumi:loadBalancerConfig: "80,443"
   iac-pulumi:ports: "22,8080"

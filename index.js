@@ -378,10 +378,18 @@ const targetGroup = new aws.lb.TargetGroup("web-app-target-group", {
 },
 });
 
+const certificate_arn = config.require("certificate_arn");
+// const certificate = await aws.acm.getCertificate({
+//   domain: domain_name,
+//   statuses: ["ISSUED"],
+// });
+
 const listener = new aws.lb.Listener("web-app-listener", {
   loadBalancerArn: loadBalancer.arn,
-  port: 80,
-  protocol: "HTTP",
+  certificateArn: certificate_arn,
+  sslPolicy: "ELBSecurityPolicy-2016-08",
+  port: 443,
+  protocol: "HTTPS",
   defaultActions: [
     {
       type: "forward",
@@ -396,26 +404,6 @@ const snsTopic = new aws.sns.Topic("webapp-assignment-submission", {
   tags: { Name: "webapp-assignment-submission" },
   
 });
-/*
-const snsPublishPolicy = new aws.iam.Policy("sns-publish-policy", {
-  description: "Allows publishing to SNS topic",
-  policy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Action: "sns:Publish",
-        Resource: snsTopic.arn,
-      },
-    ],
-  }),
-});
-
-const snsPublishPolicyAttachment = new aws.iam.PolicyAttachment("sns-publish-policy-attachment", {
-  policyArn: snsPublishPolicy.arn,
-  roles: [role.name], 
-});
-*/
 new aws.iam.RolePolicyAttachment("sns-publish-policy-attachment", {
   role: role.name,
   policyArn: "arn:aws:iam::aws:policy/AmazonSNSFullAccess",  
@@ -425,38 +413,6 @@ new aws.iam.RolePolicyAttachment("sns-publish-policy-attachment", {
 
 const gcp = require("@pulumi/gcp");
 const gcpProject = config.get("project");
-// Create a DynamoDB table
-// Define DynamoDB table's attribute and key schema
-/*
-let emailTableAttributes = [
-  { name: "receiver", type: "S" },
-  { name: "sender", type: "S" },
-  { name: "sentAt", type: "S" },
-  { name: "subject", type: "S" },
-];
-
-let emailTableKeys = [
-  { attributeName: "receiver", keyType: "HASH" },
-  { attributeName: "sender", keyType: "RANGE" },
-];
-
-// Create a DynamoDB table
-const emailTable = new aws.dynamodb.Table("emailTable", {
-  attributes: emailTableAttributes,
-  hashKey: "receiver",
-  rangeKey: "sender",
-  readCapacity: 5,
-  writeCapacity: 5,
-  globalSecondaryIndexes: [{
-      name: "SentAtAndSubject",
-      hashKey: "sentAt",
-      rangeKey: "subject",
-      readCapacity: 5,
-      writeCapacity: 5,
-      projectionType: "ALL",
-  }]
-});
-*/
 
 const emailTableAttributes = [
   { name: "id", type: "S" },
@@ -470,6 +426,7 @@ const emailTableAttributes = [
 
 // Create a DynamoDB table
 const emailTable = new aws.dynamodb.Table("emailTable", {
+  name: "emailTable",
   attributes: emailTableAttributes,
   hashKey: "id", // Use 'id' as the primary key
   readCapacity: 5,
@@ -548,39 +505,8 @@ const lambdaRolePolicyAttachment = new aws.iam.RolePolicyAttachment(
 );
 
 
-
-/*
-new aws.iam.RolePolicy("lambdaRolePolicyExtra", {
-  role: lambdaRole.id,
-  policy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Action: [
-          "dynamodb:*",
-          "sns:*",
-          "s3:*",
-          // Add CloudWatch log permissions
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
-        Effect: "Allow",
-        Resource: "*",
-      },
-    ],
-  }),
-});
-*/
 const lambdaCodeArchivePath = config.require("lambdaCodeArchivePath");
 const gcpBucketName = config.require("gcpBucketName");
-
-
-// const lambdaLogGroupName = pulumi.interpolate`/aws/lambda/${lambdaFunction.name}`;
-// const lambdaLogGroup = new aws.cloudwatch.LogGroup("lambdaLogGroup", {
-//   name: lambdaLogGroupName,
-// });
-
 
 
 // Create a new GCP service account
@@ -599,6 +525,7 @@ const bucket = new gcp.storage.Bucket(gcpBucketName, {
   name: gcpBucketName, 
   location: "US", 
   project: gcpProject, 
+  forceDestroy: true,
 });
 
 // Define bucket permissions
@@ -614,11 +541,11 @@ const base64EncodedKey = accessKey.privateKey.apply((key) =>
   Buffer.from(key).toString("ascii")
 );
 
-const mySecret = new aws.secretsmanager.Secret("ServiceAccountKey", {
-  name: "service-account-key",
+const mySecretAWS = new aws.secretsmanager.Secret("GoogleServiceAccountKeyDev", {
+  name: "google-service-account-key-dev",
 });
 
-const secretsManagerPolicy = mySecret.arn.apply((arn) => {
+const secretsManagerPolicy = mySecretAWS.arn.apply((arn) => {
   return new aws.iam.Policy("secretsManagerPolicy", {
     description: "IAM policy for Lambda to access secrets in Secrets Manager",
     policy: JSON.stringify({
@@ -647,7 +574,7 @@ const policyAttachmentSecretsManager = secretsManagerPolicy.apply((policy) => {
 const mySecretVersion = new aws.secretsmanager.SecretVersion(
   "myServiceAccountKeyVersion",
   {
-    secretId: mySecret.id,
+    secretId: mySecretAWS.id,
     secretString: base64EncodedKey,
   }
 );
@@ -667,7 +594,7 @@ const lambdaFunction = new aws.lambda.Function("lambdaFunction", {
       GOOGLE_CLOUD_BUCKET_NAME: gcpBucketName,
       DYNAMODB_TABLE_NAME: emailTable.name,
       SERVICE_ACCOUNT_KEY: accessKey.privateKey,
-      SECRET_ARN: mySecret.arn,
+      SECRET_ARN: mySecretAWS.arn,
       GOOGLE_PROJECT_ID: gcpProject,
       REGION: region,
     },
@@ -754,7 +681,8 @@ let dbConfig = pulumi
 
 
 // Create an EC2 launch template
-const ec2LaunchTemplate = new aws.ec2.LaunchTemplate("ec2LaunchTemplate", {
+const ec2LaunchTemplate = new aws.ec2.LaunchTemplate("webapp-launch-template", {
+  name: "webapp-launch-template",
   imageId: amiID, // Replace with your AMI ID
   launchTemplateName: "webapp-launch-template", 
   // version: "$Latest", // Use the latest version
@@ -793,7 +721,8 @@ const ec2LaunchTemplate = new aws.ec2.LaunchTemplate("ec2LaunchTemplate", {
 });
 
 
-const autoScalingGroup = new aws.autoscaling.Group("AutoScalerGroup", {
+const autoScalingGroup = new aws.autoscaling.Group("webapp-autoscaling-group", {
+  name: "webapp-autoscaling-group",
   vpcZoneIdentifiers: publicSubnetIDs, // Replace with your public subnet IDs
   desiredCapacity: 1,
   maxSize: 3,
@@ -802,12 +731,11 @@ const autoScalingGroup = new aws.autoscaling.Group("AutoScalerGroup", {
   // healthCheckType: "ELB",
   // healthCheckGracePeriod: 10,
   launchTemplate: {
-      id: ec2LaunchTemplate.id, // Replace with your launch template ID
+      id: ec2LaunchTemplate.id, 
   },
-  targetGroupArns: [targetGroup.arn], // Replace with your target group ARN
+  targetGroupArns: [targetGroup.arn], 
   publiclyAccessible: true,
 });
-
 
 // Create the scale up policy
 const scaleUpPolicy = new aws.autoscaling.Policy("scaleUp", {
